@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>သွေးဖိအားမှတ်တမ်း</title>
+    <meta charset="UTF-8">
+    <style>
+        body { 
+            font-family: Myanmar3, sans-serif; 
+            margin: 20px; 
+            background-color: #f5f5f5;
+        }
+        .container { 
+            max-width: 1000px; 
+            margin: auto; 
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 20px; 
+        }
+        th, td { 
+            border: 1px solid #ddd; 
+            padding: 12px; 
+            text-align: left; 
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .form-container { 
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        input, select { 
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        .primary-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .danger-btn {
+            background-color: #d9534f;
+            color: white;
+        }
+        .entry-container { 
+            position: relative;
+            padding: 10px 40px 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .delete-btn {
+            position: absolute;
+            right: 5px;
+            top: 50%;
+            transform: translateY(-50%);
+            padding: 2px 6px;
+            font-size: 14px;
+        }
+        .time-tag {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 id="monthTitle" style="color: #2c3e50; text-align: center;">သွေးဖိအားမှတ်တမ်း</h1>
+        
+        <!-- Entry Form -->
+        <div class="form-container">
+            <div class="input-group">
+                <input type="number" id="systolic" placeholder="SYS (အပေါ်ဖိအား)" autofocus>
+                <input type="number" id="diastolic" placeholder="DIA (အောက်ဖိအား)">
+                <input type="number" id="pulse" placeholder="သွေးခုန်နှုန်း">
+            </div>
+            
+            <div class="input-group">
+                <select id="timeSlot">
+                    <option value="morning">မနက်</option>
+                    <option value="noon">နေ့လယ်</option>
+                    <option value="evening">ညနေ</option>
+                    <option value="night">ည</option>
+                </select>
+                <input type="time" id="entryTime">
+                <select id="tag"></select>
+                <div style="display: flex; gap: 10px;">
+                    <button class="primary-btn" onclick="addEntry()">ထည့်မည်</button>
+                    <button class="danger-btn" onclick="editTags()">Tag များ</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Control Buttons -->
+        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+            <button class="danger-btn" onclick="resetRecords()">အားလုံးဖျက်မည်</button>
+            <button class="primary-btn" onclick="saveToFile()">ဖိုင်သိမ်းမည်</button>
+        </div>
+
+        <!-- Records Table -->
+        <table>
+            <thead>
+                <tr>
+                    <th>ရက်စွဲ</th>
+                    <th>မနက်</th>
+                    <th>နေ့လယ်</th>
+                    <th>ညနေ</th>
+                    <th>ည</th>
+                </tr>
+            </thead>
+            <tbody id="recordsBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        let records = {};
+        let currentMonth = '';
+        let tags = ['ဆေးမသောက်ခင်', 'ဆေးသောက်ပြီး'];
+
+        // Initialize application
+        function init() {
+            loadSavedData();
+            currentMonth = localStorage.getItem('currentMonth') || 
+                         prompt('မှတ်တမ်းလအမည်ထည့်ပါ (ဥပမာ- ဇန်နဝါရီ)', 
+                         new Date().toLocaleDateString('my-MM', {month: 'long'}));
+            localStorage.setItem('currentMonth', currentMonth);
+            document.getElementById('monthTitle').textContent = `${currentMonth} သွေးဖိအားမှတ်တမ်း`;
+            populateTagDropdown();
+            setCurrentTime();
+        }
+
+        // Set current time
+        function setCurrentTime() {
+            const now = new Date();
+            const timeString = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            document.getElementById('entryTime').value = timeString;
+        }
+
+        // Populate tags dropdown
+        function populateTagDropdown() {
+            const tagSelect = document.getElementById('tag');
+            tagSelect.innerHTML = tags.map(tag => 
+                `<option value="${tag}">${tag}</option>`
+            ).join('');
+        }
+
+        // Add entry
+        function addEntry() {
+            const date = getCurrentDate();
+            const timeSlot = document.getElementById('timeSlot').value;
+            const entryTime = document.getElementById('entryTime').value;
+            
+            const entry = {
+                id: Date.now(),
+                sys: document.getElementById('systolic').value,
+                dia: document.getElementById('diastolic').value,
+                pulse: document.getElementById('pulse').value || '-',
+                time: entryTime,
+                tag: document.getElementById('tag').value,
+                timeSlot: timeSlot
+            };
+
+            if(!validateEntry(entry)) return;
+
+            if(!records[date]) records[date] = { morning: [], noon: [], evening: [], night: [] };
+            records[date][timeSlot].push(entry);
+            
+            resetForm();
+            updateTable();
+            saveToLocalStorage();
+        }
+
+        // Validate entry
+        function validateEntry(entry) {
+            if(!entry.sys || !entry.dia) {
+                alert('ကျေးဇူးပြု၍ အပေါ်ဖိအားနှင့် အောက်ဖိအားကို ထည့်သွင်းပါ');
+                return false;
+            }
+            return true;
+        }
+
+        // Delete entry
+        function deleteEntry(entryId) {
+            if(confirm('မှတ်တမ်းကို ဖျက်မှာသေချာပါသလား?')) {
+                Object.entries(records).forEach(([date, timeData]) => {
+                    Object.entries(timeData).forEach(([timeSlot, entries]) => {
+                        records[date][timeSlot] = entries.filter(e => e.id !== entryId);
+                    });
+                });
+                updateTable();
+                saveToLocalStorage();
+            }
+        }
+
+        // Update table display
+        function updateTable() {
+            const tbody = document.getElementById('recordsBody');
+            tbody.innerHTML = Object.entries(records).map(([date, timeData]) => {
+                const displayDate = formatDisplayDate(date);
+                return `
+                    <tr>
+                        <td>${displayDate}</td>
+                        ${renderTimeSlot(timeData.morning)}
+                        ${renderTimeSlot(timeData.noon)}
+                        ${renderTimeSlot(timeData.evening)}
+                        ${renderTimeSlot(timeData.night)}
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Render time slot entries
+        function renderTimeSlot(entries) {
+            return `<td class="compact-cell">${
+                entries.map(entry => `
+                    <div class="entry-container">
+                        <div>
+                            ${entry.sys}/${entry.dia}/${entry.pulse}
+                            <div class="time-tag">${entry.time} | ${entry.tag}</div>
+                        </div>
+                        <button class="danger-btn delete-btn" onclick="deleteEntry('${entry.id}')">×</button>
+                    </div>
+                `).join('') || '-'
+            }</td>`;
+        }
+
+        // Date handling
+        function getCurrentDate() {
+            const d = new Date();
+            return d.toISOString().split('T')[0];
+        }
+
+        function formatDisplayDate(isoDate) {
+            const [year, month, day] = isoDate.split('-');
+            return new Date(year, month-1, day).toLocaleDateString('my-MM');
+        }
+
+        // Save/load data
+        function saveToLocalStorage() {
+            localStorage.setItem('bpRecords', JSON.stringify(records));
+            localStorage.setItem('currentMonth', currentMonth);
+            localStorage.setItem('bpTags', JSON.stringify(tags));
+        }
+
+        function loadSavedData() {
+            const savedData = localStorage.getItem('bpRecords');
+            if(savedData) records = JSON.parse(savedData);
+            tags = JSON.parse(localStorage.getItem('bpTags')) || tags;
+            updateTable();
+        }
+
+        // File export
+        function saveToFile() {
+            const content = Object.entries(records).map(([date, timeData]) => 
+                Object.entries(timeData).flatMap(([timeSlotKey, entries]) => {
+                    const timeSlot = {
+                        morning: 'မနက်',
+                        noon: 'နေ့လယ်',
+                        evening: 'ညနေ',
+                        night: 'ည'
+                    }[timeSlotKey];
+                    return entries.map(entry => 
+                        `${formatDisplayDate(date)} | ${timeSlot} | ${entry.sys}/${entry.dia}/${entry.pulse} | ${entry.time} | ${entry.tag}`
+                    );
+                }).join('\n')
+            ).join('\n');
+            
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${currentMonth}_သွေးဖိအားမှတ်တမ်း.txt`;
+            link.click();
+        }
+
+        // Reset form
+        function resetForm() {
+            document.getElementById('systolic').value = '';
+            document.getElementById('diastolic').value = '';
+            document.getElementById('pulse').value = '';
+            setCurrentTime();
+            document.getElementById('systolic').focus();
+        }
+
+        // Reset all records
+        function resetRecords() {
+            if(confirm('မှတ်တမ်းအားလုံးကို ဖျက်မှာသေချာပါသလား?')) {
+                records = {};
+                localStorage.clear();
+                currentMonth = '';
+                init();
+            }
+        }
+
+        // Edit tags
+        function editTags() {
+            const action = prompt(`လက်ရှိ Tags: ${tags.join(', ')}\n\nဖျက်လိုပါက tag name ရိုက်ထည့်ပါ\nအသစ်ထည့်လိုပါက (+) နှင့်စပြီးရိုက်ပါ\nဥပမာ: +အစာမစားခင်`);
+            
+            if(action) {
+                if(action.startsWith('+')) {
+                    // Add new tag
+                    const newTag = action.slice(1).trim();
+                    if(newTag) tags.push(newTag);
+                } else {
+                    // Delete existing tag
+                    tags = tags.filter(t => t !== action.trim());
+                }
+                populateTagDropdown();
+                saveToLocalStorage();
+            }
+        }
+
+        // Initialize on load
+        window.onload = init;
+    </script>
+    
+    <script>
+        // Modified delete function
+        function deleteEntry(entryId) {
+            if(confirm('မှတ်တမ်းကို ဖျက်မှာသေချာပါသလား?')) {
+                Object.entries(records).forEach(([date, timeData]) => {
+                    Object.entries(timeData).forEach(([timeSlot, entries]) => {
+                        records[date][timeSlot] = entries.filter(e => e.id.toString() !== entryId.toString());
+                    });
+                });
+                updateTable();
+                saveToLocalStorage();
+            }
+        }
+
+        // Modified tag handling (case-sensitive)
+        function editTags() {
+            const action = prompt(`လက်ရှိ Tags: ${tags.join(', ')}\n\nဖျက်လိုပါက tag name အတိအကျရိုက်ထည့်ပါ\nအသစ်ထည့်လိုပါက (+) နှင့်စပြီးရိုက်ပါ\nဥပမာ: +အစာမစားခင်`);
+            
+            if(action) {
+                if(action.startsWith('+')) {
+                    const newTag = action.slice(1).trim();
+                    if(newTag && !tags.includes(newTag)) {
+                        tags.push(newTag);
+                    }
+                } else {
+                    tags = tags.filter(t => t !== action.trim());
+                }
+                populateTagDropdown();
+                saveToLocalStorage();
+            }
+        }
+
+        // Modified render function
+        function renderTimeSlot(entries) {
+            return `<td class="compact-cell">${
+                entries.map(entry => `
+                    <div class="entry-container">
+                        <div>
+                            ${entry.sys}/${entry.dia}/${entry.pulse}
+                            <div class="time-tag">${entry.time} | ${entry.tag}</div>
+                        </div>
+                        <button class="danger-btn delete-btn" onclick="deleteEntry(${entry.id})">×</button>
+                    </div>
+                `).join('') || '-'
+            }</td>`;
+        }
+</script>
+</body>
+</html>
